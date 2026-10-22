@@ -1,6 +1,6 @@
 [project]
 name = "astrbot-plugin-whale-voice"
-version = "0.3.1"
+version = "0.3.2"
 description = "AstrBot 按需语音与预置曲库管理"
 requires-python = ">=3.10"
 license = "MIT"

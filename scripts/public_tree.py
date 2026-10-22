@@ -13,6 +13,7 @@ ROOT_FILES = {
     "core.py",
     "library.py",
     "backup.py",
+    "fingerprints.py",
     "voice_config.py",
     "metadata.yaml",
     "_conf_schema.json",

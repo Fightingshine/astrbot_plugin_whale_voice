@@ -40,6 +40,7 @@ from .library import (
     MAX_SONG_SECONDS,
     MAX_SONGS,
     PREVIEW_SECONDS,
+    DuplicateAudioError,
     LibraryError,
     SongLibrary,
     disk_io,
@@ -49,7 +50,7 @@ from .library import (
 from .voice_config import VOICE_URI, VoiceConfigError, load_voice_aliases
 
 PLUGIN = "astrbot_plugin_whale_voice"
-VERSION = "0.3.1"
+VERSION = "0.3.2"
 
 
 def get_query_param(req, key: str, default: str = "") -> str:
@@ -371,8 +372,16 @@ class WhaleVoicePlugin(Star):
                 extension = Path(filename).suffix.lower()
                 if extension not in ALLOWED_SONG_EXTENSIONS:
                     raise LibraryError("不支持的音频扩展名。")
+                expected = await disk_io(self.library.check_upload, staged, name, extension)
                 media = await probe_audio(staged)
-                item = await disk_io(self.library.commit, staged, name, extension, media)
+                item = await disk_io(
+                    self.library.commit,
+                    staged,
+                    name,
+                    extension,
+                    media,
+                    expected_fingerprint=expected,
+                )
             return {
                 "status": "ok",
                 "message": "音频已校验并保存为草稿；设置别名并启用后才能群内点播。",
@@ -389,6 +398,7 @@ class WhaleVoicePlugin(Star):
             )
         finally:
             if staged is not None:
+                self.library.hashes.forget(staged)
                 try:
                     staged.unlink(missing_ok=True)
                 except OSError:
@@ -508,6 +518,19 @@ class WhaleVoicePlugin(Star):
                     raise LibraryError("请求长度无效。") from exc
 
     def _web_error(self, exc):
+        if isinstance(exc, DuplicateAudioError):
+            # 原生Bridge在HTTP失败时丢弃data；已处理的业务冲突保留error信封与安全详情。
+            # 旧页面仍按status:error拒绝显示成功，认证失败等传输错误继续返回4xx。
+            return error_response(
+                str(exc),
+                status_code=200,
+                data={
+                    "code": "duplicate_audio",
+                    "saved": False,
+                    "duplicates": exc.duplicates,
+                    "match_count": exc.match_count,
+                },
+            )
         return error_response(str(exc), status_code=getattr(exc, "status_code", 400))
 
     async def api_songs_update(self):

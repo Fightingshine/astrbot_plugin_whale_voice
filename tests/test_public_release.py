@@ -87,6 +87,7 @@ class PublicReleaseTests(unittest.TestCase):
             self.assertIn("pages/songs/index.html", manifest["files"])
             self.assertIn("voice_config.py", manifest["files"])
             self.assertIn("backup.py", manifest["files"])
+            self.assertIn("fingerprints.py", manifest["files"])
             self.assertIn("scripts/manage_library.py", manifest["files"])
             self.assertFalse(
                 any(name.endswith((".mp3", ".wav", ".db", ".log")) for name in archive.namelist())

@@ -28,7 +28,7 @@ class LibraryTests(unittest.TestCase):
 
     def create(self, name="测试歌", enabled=False):
         stage = self.library.create_stage()
-        stage.write_bytes(b"RIFF" + b"x" * 80)
+        stage.write_bytes(b"RIFF" + (name.encode("utf-8") + b"x" * 80)[:80])
         row = self.library.commit(stage, name, ".wav", {"duration_seconds": 1.0})
         return (
             self.library.update(
