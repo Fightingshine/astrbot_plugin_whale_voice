@@ -159,6 +159,12 @@ class WhaleVoicePlugin(Star):
             "上传预置歌曲",
         )
         context.register_web_api(
+            "/" + PLUGIN + "/page/songs/upload-v2",
+            self.api_songs_upload_v2,
+            ["POST"],
+            "上传及处理相同原音",
+        )
+        context.register_web_api(
             "/" + PLUGIN + "/page/songs/delete",
             self.api_songs_delete,
             ["POST"],
@@ -316,7 +322,10 @@ class WhaleVoicePlugin(Star):
         except VoiceError as exc:
             return self._web_error(exc)
 
-    async def api_songs_upload(self):
+    async def api_songs_upload_v2(self):
+        return await self.api_songs_upload(typed_conflicts=True)
+
+    async def api_songs_upload(self, *, typed_conflicts=False):
         staged = None
         try:
             self._web_guard()
@@ -388,6 +397,8 @@ class WhaleVoicePlugin(Star):
                 "data": item,
             }
         except VoiceError as exc:
+            if typed_conflicts and isinstance(exc, DuplicateAudioError):
+                return {"status": "ok", "data": {"upload_conflict": self._duplicate_details(exc)}}
             return self._web_error(exc)
         except Exception as exc:  # noqa: BLE001 -- API边界只记录异常类型，避免泄露凭据。
             if type(exc).__name__ == "UploadTooLargeError":
@@ -517,21 +528,19 @@ class WhaleVoicePlugin(Star):
                 except ValueError as exc:
                     raise LibraryError("请求长度无效。") from exc
 
+    @staticmethod
+    def _duplicate_details(exc):
+        return {
+            "code": "duplicate_audio",
+            "saved": False,
+            "message": str(exc),
+            "duplicates": exc.duplicates,
+            "match_count": exc.match_count,
+        }
+
     def _web_error(self, exc):
-        if isinstance(exc, DuplicateAudioError):
-            # 原生Bridge在HTTP失败时丢弃data；已处理的业务冲突保留error信封与安全详情。
-            # 旧页面仍按status:error拒绝显示成功，认证失败等传输错误继续返回4xx。
-            return error_response(
-                str(exc),
-                status_code=200,
-                data={
-                    "code": "duplicate_audio",
-                    "saved": False,
-                    "duplicates": exc.duplicates,
-                    "match_count": exc.match_count,
-                },
-            )
-        return error_response(str(exc), status_code=getattr(exc, "status_code", 400))
+        data = self._duplicate_details(exc) if isinstance(exc, DuplicateAudioError) else None
+        return error_response(str(exc), status_code=getattr(exc, "status_code", 400), data=data)
 
     async def api_songs_update(self):
         try:

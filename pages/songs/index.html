@@ -879,19 +879,21 @@
       try {
         const b=await waitForBridge();let data;
         const filename=name+(file.name.match(/\.[^.]+$/)?.[0]||".mp3");
-        if(b?.upload) data=unwrap(await b.upload("page/songs/upload",new File([file],filename,{type:file.type})));
+        if(b?.upload) data=unwrap(await b.upload("page/songs/upload-v2",new File([file],filename,{type:file.type})));
         else {
           if(file.size>4*1024*1024)throw new Error("大文件请从 AstrBot 原生曲库页面上传；兼容上传上限4MB。");
           const encoded=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result.split(",")[1]);reader.onerror=reject;reader.readAsDataURL(file);});
-          data=await apiRequest("page/songs/upload",{method:"POST",body:{filename,song_name:name,content_base64:encoded}});
+          data=await apiRequest("page/songs/upload-v2",{method:"POST",body:{filename,song_name:name,content_base64:encoded}});
         }
+        if (data?.upload_conflict?.code === "duplicate_audio") {
+          selectedFile=null;fileInput.value="";uploadForm.style.display="none";$("selectedFileInfo").textContent="";
+          showDuplicate(data.upload_conflict); showToast("已找到相同原音，没有重复占用曲库空间。", "info"); return;
+        }
+        if (typeof data?.filename !== "string") throw new Error("未收到已保存的曲目记录，请刷新核对，不要重复提交。");
         selectedFile=null;fileInput.value="";uploadForm.style.display="none";$("selectedFileInfo").textContent="";
         showToast("音频已校验并保存为草稿，请设置别名并启用点播。","success");await fetchSongs();
         if(data?.filename) {setBusy(false);const song=songsData.find(x=>x.filename===data.filename);if(song)editSong(song);}
-      }catch(error){
-        if(error.data?.code==="duplicate_audio") { selectedFile=null;fileInput.value="";uploadForm.style.display="none";$("selectedFileInfo").textContent="";showDuplicate(error.data); showToast("已找到相同原音，没有重复占用曲库空间。","info"); }
-        else showToast(error.message||"上传未完成，请刷新核对。","error");
-      }
+      }catch(error){showToast(error.message||"上传未完成，请刷新核对。","error");}
       finally{setBusy(false);}
     });
     $("searchInput").addEventListener("input",renderSongsTable);

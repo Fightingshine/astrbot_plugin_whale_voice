@@ -25,21 +25,27 @@
 
 不支持多个机器人进程或其他程序并行修改同一个数据目录。外部变更被发现时拒绝本次上传，要求刷新核对；这不是抵御有权限恶意修改文件、伪造元数据或回退系统时钟的完整性认证方案。
 
-## API结果
+## API结果与原生Bridge
 
-为了兼容AstrBot原生Bridge（HTTP错误会丢弃结构化详情），**已识别的重复原音**使用HTTP 200但`status: "error"`的业务错误信封：
+旧入口`page/songs/upload`保持重复时HTTP 409、`status: error`，不会让旧页面或旧客户端误报成功。权限错误仍为403。
+
+AstrBot原生父页面会把API业务错误转换为只含文字的JavaScript异常，丢掉结构化详情；即使HTTP改成200也不能直接解决。因此新管理页使用新增的`page/songs/upload-v2`入口：认证、校验与最终入库逻辑完全复用，只有**可处理的重复结果**采用成功传输信封，具体业务结果明确为未保存：
 
 ```json
 {
-  "status": "error",
-  "message": "曲库已有相同原音……未保存重复文件，也未修改已有曲目。",
+  "status": "ok",
   "data": {
-    "code": "duplicate_audio",
-    "saved": false,
-    "match_count": 1,
-    "duplicates": [{"filename": "示例.wav", "name": "示例", "enabled": false}]
+    "upload_conflict": {
+      "code": "duplicate_audio",
+      "saved": false,
+      "message": "曲库已有相同原音……未保存重复文件。",
+      "match_count": 1,
+      "duplicates": [{"filename": "示例.wav", "name": "示例", "enabled": false}]
+    }
   }
 }
 ```
 
-自定义客户端必须检查`status`，不能只把HTTP 200视为已上传。旧版管理页仍会按`status: error`显示错误，不会谎报成功。详情最多返回8首，不包含摘要或服务器绝对路径。同名冲突仍返回409；未登录、跨站修改等权限错误仍返回403，不读取、查询或返回曲库详情。
+新页面先检查`upload_conflict`并显示定位入口，只有收到实际保存的`filename`才显示上传成功。自定义v2客户端也必须检查业务结果，不能只凭HTTP 200或外层`status: ok`判断已保存。正常上传仍返回已有曲目记录格式。详情最多8首，不包含摘要或服务器绝对路径。
+
+两个入口都先做登录和来源检查。未登录、跨站修改等仍返回403，不读取、查询或返回曲库详情。没有放宽权限，也没有修改AstrBot父页面或SDK。

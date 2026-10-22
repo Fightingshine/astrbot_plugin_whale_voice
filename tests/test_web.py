@@ -115,18 +115,35 @@ class WebTests(unittest.IsolatedAsyncioTestCase):
             patch.object(module, "request", Request(files={"file": upload})),
             patch.object(module, "probe_audio") as probe,
         ):
-            result = await self.plugin.api_songs_upload()
-        self.assertEqual(result["status"], "error")
-        self.assertEqual(result["status_code"], 200)  # 已处理业务冲突，保留原生Bridge的结构化详情。
-        self.assertEqual(result["data"]["code"], "duplicate_audio")
-        self.assertFalse(result["data"]["saved"])
+            result = await self.plugin.api_songs_upload_v2()
+        self.assertEqual(result["status"], "ok")
+        conflict = result["data"]["upload_conflict"]
+        self.assertEqual(conflict["code"], "duplicate_audio")
+        self.assertFalse(conflict["saved"])
         self.assertEqual(
-            result["data"]["duplicates"],
+            conflict["duplicates"],
             [{"filename": row["filename"], "name": row["name"], "enabled": False}],
         )
         self.assertEqual(self.plugin.library.index.read_bytes(), before)
         self.assertFalse(list(self.plugin.library.staging.iterdir()))
         probe.assert_not_called()
+
+    async def test_legacy_identical_audio_keeps_http_conflict(self):
+        row = self.song(enabled=True)
+        upload = Upload((self.plugin.songs_dir / row["filename"]).read_bytes())
+        upload.filename = "不同名称.wav"
+        with patch.object(module, "request", Request(files={"file": upload})):
+            result = await self.plugin.api_songs_upload()
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(result["status_code"], 409)
+        self.assertEqual(result["data"]["code"], "duplicate_audio")
+        self.assertEqual(len(self.plugin.library.list()), 1)
+
+    async def test_v2_unauthenticated_upload_still_forbidden(self):
+        with patch.object(module, "request", Request(username="")):
+            result = await self.plugin.api_songs_upload_v2()
+        self.assertEqual(result["status_code"], 403)
+        self.assertNotIn("upload_conflict", str(result))
 
     async def test_unauthenticated_upload_never_reads_or_hashes_library(self):
         request = Request(files={"file": Upload()}, username="")
