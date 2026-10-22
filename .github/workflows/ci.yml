@@ -1,0 +1,46 @@
+name: 离线回归与公开源码检查
+"on":
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  test:
+    name: ${{ matrix.os }} / Python ${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ['3.10', '3.12']
+    env:
+      PYTHONIOENCODING: utf-8
+      PIP_INDEX_URL: https://pypi.tuna.tsinghua.edu.cn/simple
+    steps:
+      - name: 检出源码
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: 设置Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - name: 安装开发依赖
+        run: python -m pip install -r requirements-dev.txt
+      - name: 检查公开源码
+        run: python scripts/check_public_tree.py
+      - name: 静态检查
+        run: python -m ruff check .
+      - name: 格式检查
+        run: python -m ruff format --check .
+      - name: 运行离线回归
+        run: python scripts/run_tests.py
+      - name: 检查页面JavaScript
+        run: python scripts/check_page.py
+      - name: 构建源码归档
+        run: python scripts/build_release.py

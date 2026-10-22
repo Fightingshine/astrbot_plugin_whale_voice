@@ -1,0 +1,21 @@
+name: astrbot_plugin_whale_voice
+display_name: 蓝色大肥鱼语音与曲库管理
+author: Fightingshine
+version: 0.3.0
+repo: https://github.com/Fightingshine/astrbot_plugin_whale_voice
+astrbot_version: ">=4.29.1"
+support_platforms: [aiocqhttp]
+desc: 蓝色大肥鱼专属音色朗读、预置曲库、别名启停与按需歌唱。
+pages:
+  songs:
+    title: 预置曲库管理
+    description: 在 AstrBot 面板上传、短试听、原音下载、别名与启停管理
+i18n:
+  zh-CN:
+    metadata:
+      display_name: 蓝色大肥鱼语音与曲库管理
+      desc: 蓝色大肥鱼专属音色朗读、预置曲库、别名启停与按需歌唱。
+    pages:
+      songs:
+        title: 预置曲库管理
+        description: 在 AstrBot 面板上传、短试听、原音下载、别名与启停管理

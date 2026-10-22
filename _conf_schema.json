@@ -1,0 +1,60 @@
+{
+  "enabled": {
+    "description": "启用按需语音与歌唱入口",
+    "type": "bool",
+    "default": true
+  },
+  "platform_id": {
+    "description": "允许使用的QQ平台ID",
+    "type": "string",
+    "default": "qq-napcat"
+  },
+  "allowed_groups": {
+    "description": "允许使用的群号（默认不授权任何群）",
+    "type": "list",
+    "default": []
+  },
+  "allow_admin_private": {
+    "description": "允许机器人管理员在私聊中使用",
+    "type": "bool",
+    "default": true
+  },
+  "speech_credential_provider_id": {
+    "description": "复用现有硅基流动embedding提供商的ID，不复制或公开密钥",
+    "type": "string",
+    "default": ""
+  },
+  "voice": {
+    "description": "音色：内置音色可直接选择；custom使用下方自定义引用；旧版别名从服务器私有映射读取。",
+    "type": "string",
+    "default": "claire",
+    "options": [
+      "dafeiyu",
+      "dafeiyu_ssr",
+      "dafeiyu_cat",
+      "claire",
+      "anna",
+      "bella",
+      "alex",
+      "benjamin",
+      "charles",
+      "david",
+      "custom"
+    ]
+  },
+  "sing_provider_id": {
+    "description": "MiMo TTS歌唱提供商ID；请先在模型提供商页面添加MiMo TTS，填API Key并把风格提示设为“唱歌”。留空不发起歌唱请求。",
+    "type": "string",
+    "default": ""
+  },
+  "allow_experimental_tts_singing": {
+    "description": "实验性TTS唱歌标签（默认关闭）：仅 /即兴唱 明确请求时允许使用普通TTS的singing标签，不保证旋律与唱腔，可能产生语音费用。曲库点播未命中永不自动使用。",
+    "type": "bool",
+    "default": false
+  },
+  "custom_voice_uri": {
+    "description": "自定义音色引用（speech:...）。只保存在服务器配置，勿提交到GitHub；voice选择custom后使用。",
+    "type": "string",
+    "default": ""
+  }
+}

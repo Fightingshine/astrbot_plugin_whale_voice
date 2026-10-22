@@ -1,0 +1,1 @@
+# 复用 AstrBot 已有的 aiohttp 与系统 ffmpeg，不下载本地语音大模型。

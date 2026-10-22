@@ -1,0 +1,22 @@
+name: 功能建议
+description: 描述需要解决的使用问题以及如何验证。
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 需要解决什么问题
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 怎样确认功能已经完成
+      description: 尽量给出具体操作、输入与预期输出。
+    validations:
+      required: true
+  - type: textarea
+    id: constraints
+    attributes:
+      label: 约束
+      description: 例如2G服务器、不能额外付费、不能修改现有授权等。
