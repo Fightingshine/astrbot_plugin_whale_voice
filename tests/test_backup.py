@@ -10,10 +10,12 @@ import struct
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 import warnings
 import zipfile
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from astrbot_plugin_whale_voice import backup
@@ -44,6 +46,71 @@ class BackupTests(unittest.TestCase):
             enabled=enabled,
         )
         return row, body
+
+    def test_regular_opens_file_rewritten_after_creation(self):
+        path = self.root / "rewritten.wav"
+        path.write_bytes(b"initial")
+        time.sleep(0.02)
+        path.write_bytes(b"updated")
+        with backup._regular(path) as source:
+            self.assertEqual(source.read(), b"updated")
+
+    def test_open_boundary_handles_creation_and_change_time_difference(self):
+        path = self.root / "stat-clock.wav"
+        path.write_bytes(b"fixture")
+        actual = path.stat()
+        fields = {
+            key: getattr(actual, key)
+            for key in ("st_mode", "st_dev", "st_ino", "st_size", "st_mtime_ns")
+        }
+        path_stat = SimpleNamespace(**fields, st_ctime_ns=100, st_birthtime_ns=100)
+        opened_stat = SimpleNamespace(**fields, st_ctime_ns=200, st_birthtime_ns=100)
+        self.assertNotEqual(backup._signature(path_stat), backup._signature(opened_stat))
+        with (
+            patch.object(Path, "stat", return_value=path_stat),
+            patch.object(backup.os, "fstat", return_value=opened_stat),
+            backup._regular(path) as source,
+        ):
+            self.assertEqual(source.read(), b"fixture")
+
+    def test_open_boundary_still_rejects_identity_size_and_write_changes(self):
+        path = self.root / "identity.wav"
+        path.write_bytes(b"fixture")
+        actual = path.stat()
+        fields = {
+            key: getattr(actual, key)
+            for key in ("st_mode", "st_dev", "st_ino", "st_size", "st_mtime_ns")
+        }
+        fields.update(st_ctime_ns=100, st_birthtime_ns=100)
+        for key in ("st_dev", "st_ino", "st_size", "st_mtime_ns", "st_birthtime_ns"):
+            with self.subTest(changed=key):
+                changed = {**fields, key: fields[key] + 1}
+                with (
+                    patch.object(Path, "stat", return_value=SimpleNamespace(**fields)),
+                    patch.object(backup.os, "fstat", return_value=SimpleNamespace(**changed)),
+                    self.assertRaises(backup.BackupError),
+                    backup._regular(path),
+                ):
+                    self.fail("不能接受已变化的文件。")
+
+    def test_open_boundary_without_birthtime_keeps_change_time_check(self):
+        path = self.root / "change-time.wav"
+        path.write_bytes(b"fixture")
+        actual = path.stat()
+        fields = {
+            key: getattr(actual, key)
+            for key in ("st_mode", "st_dev", "st_ino", "st_size", "st_mtime_ns")
+        }
+        fields["st_ctime_ns"] = 100
+        with (
+            patch.object(Path, "stat", return_value=SimpleNamespace(**fields)),
+            patch.object(
+                backup.os, "fstat", return_value=SimpleNamespace(**{**fields, "st_ctime_ns": 200})
+            ),
+            self.assertRaises(backup.BackupError),
+            backup._regular(path),
+        ):
+            self.fail("没有创建时间字段时仍要检查状态变化时间。")
 
     def entries(self):
         with zipfile.ZipFile(self.archive) as z:

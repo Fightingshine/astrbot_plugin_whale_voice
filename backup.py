@@ -51,6 +51,12 @@ def _signature(value):
     return (value.st_dev, value.st_ino, value.st_size, value.st_mtime_ns, value.st_ctime_ns)
 
 
+def _opened_signature(value):
+    # Windows 3.12的stat仍可能以ctime表示创建时间，fstat则表示状态变化时间。
+    # 仅在两种API的打开边界比较创建时间；同API快照继续保留ctime变化检测。
+    return (*_signature(value)[:4], getattr(value, "st_birthtime_ns", value.st_ctime_ns))
+
+
 def _filename(value):
     if (
         not isinstance(value, str)
@@ -122,9 +128,10 @@ def _regular(path):
     before = path.stat()
     fd = os.open(path, os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0))
     with os.fdopen(fd, "rb") as handle:
-        if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode) or _signature(
-            os.fstat(handle.fileno())
-        ) != _signature(before):
+        opened = os.fstat(handle.fileno())
+        if not stat.S_ISREG(opened.st_mode) or _opened_signature(opened) != _opened_signature(
+            before
+        ):
             raise BackupError("文件在打开时发生变化，请稍后重试。")
         yield handle
 
@@ -228,12 +235,13 @@ def create_backup(data_root: Path, output: Path):
                     _regular(path) as source,
                     archive.open(_info("songs/" + row["filename"]), "w") as target,
                 ):
-                    before = _signature(os.fstat(source.fileno()))
+                    opened = os.fstat(source.fileno())
+                    before = _signature(opened)
                     checksum = _copy(source, target, row["size_bytes"])
                     if (
                         _signature(os.fstat(source.fileno())) != before
                         or path.is_symlink()
-                        or _signature(path.stat()) != before
+                        or _opened_signature(path.stat()) != _opened_signature(opened)
                     ):
                         raise BackupError("原音在备份时发生变化，未发布不一致归档。")
                 manifest["songs"].append(
