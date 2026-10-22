@@ -51,6 +51,8 @@ def build(root, output):
     for path in public_files(root):
         name = path.relative_to(root).as_posix()
         blob = path.read_bytes()
+        if path.suffix.lower() not in {".png", ".webp"}:
+            blob = blob.decode("utf-8-sig").replace("\r\n", "\n").encode("utf-8")
         contents[name] = blob
         manifest["files"][name] = {"bytes": len(blob), "sha256": hashlib.sha256(blob).hexdigest()}
     required = {

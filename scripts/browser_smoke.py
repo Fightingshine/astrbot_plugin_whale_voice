@@ -203,6 +203,9 @@ try:
         check("closed_player_not_visible", not page.locator("#playerBar").is_visible())
         page.set_viewport_size({"width": 1440, "height": 1050})
         page.evaluate("document.documentElement.dataset.theme='dark'")
+        page.wait_for_function(
+            "getComputedStyle(document.body).backgroundColor==='rgb(15, 23, 42)'"
+        )
         page.screenshot(path=str(OUT / "fixture-dark.png"), full_page=True)
         check("console_no_page_errors", not errors)
         sandbox = ctx.new_page()

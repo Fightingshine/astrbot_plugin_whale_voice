@@ -90,6 +90,21 @@ class PublicReleaseTests(unittest.TestCase):
                 any(name.endswith((".mp3", ".wav", ".db", ".log")) for name in archive.namelist())
             )
 
+    def test_archive_normalizes_windows_line_endings_and_bom(self):
+        copied = self.root / "windows-checkout"
+        for source in public.public_files(ROOT):
+            target = copied / source.relative_to(ROOT)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            blob = source.read_bytes()
+            if source.suffix.lower() not in {".png", ".webp"}:
+                blob = b"\xef\xbb\xbf" + blob.decode("utf-8-sig").replace("\r\n", "\n").replace(
+                    "\n", "\r\n"
+                ).encode("utf-8")
+            target.write_bytes(blob)
+        first = release.build(ROOT, self.root / "linux-output")
+        second = release.build(copied, self.root / "windows-output")
+        self.assertEqual(first["sha256"], second["sha256"])
+
     def test_existing_different_release_not_overwritten(self):
         target = self.root / "out"
         target.mkdir()
