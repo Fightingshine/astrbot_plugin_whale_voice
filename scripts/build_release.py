@@ -59,6 +59,7 @@ def build(root, output):
         "main.py",
         "core.py",
         "library.py",
+        "backup.py",
         "voice_config.py",
         "metadata.yaml",
         "_conf_schema.json",

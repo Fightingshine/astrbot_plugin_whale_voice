@@ -86,6 +86,8 @@ class PublicReleaseTests(unittest.TestCase):
             self.assertIn("LICENSE", manifest["files"])
             self.assertIn("pages/songs/index.html", manifest["files"])
             self.assertIn("voice_config.py", manifest["files"])
+            self.assertIn("backup.py", manifest["files"])
+            self.assertIn("scripts/manage_library.py", manifest["files"])
             self.assertFalse(
                 any(name.endswith((".mp3", ".wav", ".db", ".log")) for name in archive.namelist())
             )
@@ -108,7 +110,7 @@ class PublicReleaseTests(unittest.TestCase):
     def test_existing_different_release_not_overwritten(self):
         target = self.root / "out"
         target.mkdir()
-        archive = target / "astrbot_plugin_whale_voice-v0.3.0.zip"
+        archive = target / ("astrbot_plugin_whale_voice-v" + release.release_version(ROOT) + ".zip")
         archive.write_bytes(b"previous-release")
         with self.assertRaises(ValueError):
             release.build(ROOT, target)

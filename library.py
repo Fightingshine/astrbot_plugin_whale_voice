@@ -46,17 +46,32 @@ async def disk_io(function, *args, **kwargs):
 
 
 class SongLibrary:
-    def __init__(self, root: Path):
+    def __init__(self, root: Path, *, readonly=False):
         self.root = Path(root)
+        self.readonly = bool(readonly)
         self.songs = self.root / "songs"
         self.staging = self.root / ".song-staging"
+        marker = self.root / ".restore-incomplete"
+        if self.root.is_symlink() or marker.exists() or marker.is_symlink():
+            raise LibraryError("曲库目录不安全或恢复尚未完成，拒绝读写。")
         for p in (self.songs, self.staging):
             if p.is_symlink():
                 raise LibraryError("曲库目录不能是符号链接。")
-            p.mkdir(parents=True, exist_ok=True, mode=0o700)
+        if self.readonly:
+            if not self.root.is_dir() or not self.songs.is_dir():
+                raise LibraryError("只读曲库不存在，不会自动创建目录。")
+        else:
+            for p in (self.songs, self.staging):
+                p.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.index = self.root / "song-library.json"
 
+    def _require_write(self):
+        if self.readonly:
+            raise LibraryError("曲库以只读方式打开，不能修改文件或设置。")
+
     def _read(self):
+        if self.index.is_symlink():
+            raise LibraryError("曲库索引不能是符号链接。")
         if not self.index.exists():
             return {"version": 1, "songs": {}}
         try:
@@ -73,7 +88,7 @@ class SongLibrary:
                 ):
                     raise TypeError()
             return obj
-        except (OSError, ValueError, TypeError, AttributeError) as exc:
+        except (OSError, ValueError, TypeError, AttributeError, RecursionError) as exc:
             raise LibraryError(
                 "曲库索引异常，已停止修改与点播；原音频未被删除，请管理员检查。", 500
             ) from exc
@@ -123,9 +138,11 @@ class SongLibrary:
         return total
 
     def create_stage(self):
+        self._require_write()
         return self.staging / (uuid.uuid4().hex + ".upload")
 
     def commit(self, staged: Path, song_name, extension, media):
+        self._require_write()
         if (
             staged.is_symlink()
             or staged.parent.resolve() != self.staging.resolve()
@@ -166,6 +183,7 @@ class SongLibrary:
         return self.get(target.name)
 
     def update(self, filename, revision, *, aliases, description, enabled):
+        self._require_write()
         self.get(filename, revision)
         if (
             not isinstance(aliases, list)
@@ -198,6 +216,7 @@ class SongLibrary:
         return self.get(filename)
 
     def rename(self, filename, revision, new_name):
+        self._require_write()
         row = self.get(filename, revision)
         old = get_preset_song_path(self.songs, filename)
         name = sanitize_song_name(new_name)
@@ -223,6 +242,7 @@ class SongLibrary:
         return self.get(target.name)
 
     def delete(self, filename, revision):
+        self._require_write()
         row = self.get(filename, revision)
         path = get_preset_song_path(self.songs, filename)
         hidden = self.staging / (uuid.uuid4().hex + ".trash")
@@ -271,6 +291,7 @@ class SongLibrary:
         return matches[0] if matches else None
 
     def snapshot(self, filename, revision, target, *, allow_disabled=False):
+        self._require_write()
         row = self.get(filename, revision)
         if not row["enabled"] and not allow_disabled:
             raise LibraryError("这首歌已暂停点播，请换一首。")
