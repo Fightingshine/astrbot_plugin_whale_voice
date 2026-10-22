@@ -50,7 +50,7 @@ function listing(){return {songs:window.__rows,total_count:window.__rows.length,
 window.AstrBotPluginPage={ready:async()=>{},onContext:callback=>callback({isDark:false}),
  apiGet:async(path,params)=>{window.__calls.push({path,params});if(window.__failNext==='list'){window.__failNext='';throw new Error('隔离测试：临时加载失败');}if(path.endsWith('/list'))return listing();if(path.endsWith('/audio'))return {audio_url:AUDIO,preview_seconds:.2};throw new Error('未知读取接口');},
  apiPost:async(path,body)=>{window.__calls.push({path,body});const row=window.__rows.find(x=>x.filename===body.filename);if(!row||row.revision!==body.revision)return {status:'error',message:'版本已变化，请刷新'};if(path.endsWith('/update')){Object.assign(row,{aliases:body.aliases,description:body.description,enabled:body.enabled,revision:row.revision+'x'});return row;}if(path.endsWith('/rename')){row.name=body.new_name;row.filename=body.new_name+row.extension;row.revision+='x';return row;}if(path.endsWith('/delete')){window.__rows=window.__rows.filter(x=>x!==row);return {deleted:true};}throw new Error('未知修改接口');},
- upload:async(path,file)=>{window.__calls.push({path,filename:file.name});if(window.__rows.some(x=>x.filename===file.name))return {status:'error',message:'同名歌曲已存在，原文件未被覆盖'};const row={name:file.name.replace(/\.[^.]+$/,''),filename:file.name,extension:'.wav',size_str:'6 KB',size_bytes:file.size,mtime_str:'2026-10-23 00:00',revision:'new',enabled:false,aliases:[],description:''};window.__rows.push(row);return row;},
+ upload:async(path,file)=>{window.__calls.push({path,filename:file.name});if(window.__duplicateNext){const old=window.__duplicateNext;window.__duplicateNext=null;return {status:'ok',data:{upload_conflict:{code:'duplicate_audio',saved:false,message:'曲库已有相同原音，未保存重复文件。',duplicates:[{name:old.name,filename:old.filename,enabled:old.enabled}],match_count:1}}};}if(window.__rows.some(x=>x.filename===file.name))return {status:'error',message:'同名歌曲已存在，原文件未被覆盖'};const row={name:file.name.replace(/\.[^.]+$/,''),filename:file.name,extension:'.wav',size_str:'6 KB',size_bytes:file.size,mtime_str:'2026-10-23 00:00',revision:'new',enabled:false,aliases:[],description:''};window.__rows.push(row);return row;},
  download:async(path,params,name)=>window.__downloads.push({path,params,name})};
 """.replace("INITIAL", json.dumps(rows, ensure_ascii=False)).replace("AUDIO", json.dumps(AUDIO))
 
@@ -100,6 +100,63 @@ try:
         )
         page.evaluate("showToast('<img src=x onerror=window.__xss=1>')")
         check("toast_not_html", page.locator("#toastContainer img").count() == 0)
+        for index, state in ((1, "未开放"), (2, "已启用")):
+            candidate = page.evaluate(f"window.__rows[{index}]")
+            before_count = page.evaluate("window.__rows.length")
+            page.evaluate(f"window.__duplicateNext=window.__rows[{index}]")
+            page.locator("#fileInput").set_input_files(
+                {"name": "重复上传.wav", "mimeType": "audio/wav", "buffer": raw.getvalue()}
+            )
+            page.locator("#btnUploadSubmit").click()
+            page.locator("#duplicateNotice").wait_for(state="visible")
+            check(
+                f"duplicate_{index}_does_not_create_row",
+                page.evaluate("window.__rows.length") == before_count,
+            )
+            check(
+                f"duplicate_{index}_status_visible",
+                state in page.locator("#duplicateChoices").inner_text(),
+            )
+            check(
+                f"duplicate_{index}_name_is_text",
+                page.locator("#duplicateChoices img").count() == 0
+                and page.evaluate("window.__xss") is None,
+            )
+            check(
+                f"duplicate_{index}_selection_cleared",
+                page.evaluate("selectedFile===null")
+                and not page.locator("#uploadForm").is_visible(),
+            )
+            if index == 1:
+                page.screenshot(path=str(OUT / "duplicate-desktop.png"), full_page=True)
+            if index == 2:
+                page.set_viewport_size({"width": 430, "height": 1000})
+                page.locator("#duplicateNotice").scroll_into_view_if_needed()
+                page.screenshot(path=str(OUT / "duplicate-mobile.png"), full_page=True)
+                check(
+                    "duplicate_mobile_no_document_overflow",
+                    page.evaluate("document.documentElement.scrollWidth<=window.innerWidth"),
+                )
+                check(
+                    "duplicate_mobile_choice_visible",
+                    page.locator("#duplicateChoices button").is_visible(),
+                )
+                page.set_viewport_size({"width": 1440, "height": 1050})
+            page.get_by_role(
+                "button", name="定位已有原音：" + candidate["filename"], exact=True
+            ).click()
+            page.wait_for_function("document.querySelectorAll('#songTableBody tr').length===1")
+            check(
+                f"duplicate_{index}_locates_original",
+                page.locator("#songTableBody tr").get_attribute("data-filename")
+                == candidate["filename"],
+            )
+            check(
+                f"duplicate_{index}_does_not_open_editor",
+                not page.locator("#editDialog").is_visible(),
+            )
+            page.locator("#searchInput").fill("")
+        page.evaluate("hideDuplicate()")
         page.locator("#searchInput").fill("猫猫")
         check("alias_search", page.locator("#songTableBody tr").count() == 1)
         page.locator("#searchInput").fill("没有这首歌")

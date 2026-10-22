@@ -308,6 +308,12 @@
       color: var(--text-muted);
     }
 
+    .duplicate-notice { margin-top: 16px; padding: 16px; border: 1px solid var(--border-color); border-radius: 10px; background: var(--primary-light); overflow-wrap: anywhere; }
+    .duplicate-notice[hidden] { display: none; }
+    .duplicate-choices { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .duplicate-choices button { max-width: 100%; white-space: normal; overflow-wrap: anywhere; text-align: left; }
+    .song-table tr.is-located td { background: var(--primary-light); }
+
     /* 表格样式 */
     .table-responsive {
       overflow-x: auto;
@@ -468,7 +474,7 @@
         <div class="header-icon">🐳</div>
         <div class="header-title">
           <h1>预置原音曲库管理</h1>
-          <p><span id="versionLabel">v0.3.1</span> · 保留专属音色 · 曲库点播不调用语音模型 · 未命中不自动合成</p>
+          <p><span id="versionLabel">v0.3.2</span> · 保留专属音色 · 曲库点播不调用语音模型 · 未命中不自动合成</p>
         </div>
       </div>
       <div>
@@ -533,6 +539,12 @@
         </div>
       </div>
     </div>
+
+    <section class="duplicate-notice" id="duplicateNotice" hidden aria-live="polite">
+      <strong>这份原音已经在曲库里啦</strong>
+      <p id="duplicateMessage" class="song-detail"></p>
+      <div class="duplicate-choices" id="duplicateChoices"></div>
+    </section>
 
     <!-- 歌曲列表卡片 -->
     <div class="card">
@@ -660,8 +672,29 @@
     }
     function unwrap(result) {
       if (!result) throw new Error("服务器未返回结果，请刷新核对，不要重复提交。");
-      if (result.status === "error") throw new Error(result.message || "操作未完成，请刷新核对。");
+      if (result.status === "error") throw Object.assign(new Error(result.message || "操作未完成，请刷新核对。"), {data: result.data});
       return result.status === "ok" ? result.data : result;
+    }
+    function hideDuplicate() { $("duplicateNotice").hidden = true; $("duplicateChoices").replaceChildren(); }
+    function showDuplicate(details) {
+      const choices = Array.isArray(details?.duplicates) ? details.duplicates.slice(0, 8) : [];
+      $("duplicateMessage").textContent = `找到 ${Number(details?.match_count) || choices.length} 首相同原始文件，未重复保存，也未改动已有曲目。点下方按钮查看；未开放的曲目仍需手动启用。`;
+      $("duplicateChoices").replaceChildren();
+      for (const duplicate of choices) {
+        if (typeof duplicate?.filename !== "string" || typeof duplicate?.name !== "string") continue;
+        const button = el("button", `${duplicate.name} · ${duplicate.enabled === true ? "已启用" : "未开放"} · 查看`, "btn btn-secondary btn-sm");
+        button.type = "button"; button.setAttribute("aria-label", "定位已有原音：" + duplicate.filename);
+        button.addEventListener("click", async () => {
+          await fetchSongs();
+          const song = songsData.find(row => row.filename === duplicate.filename);
+          if (!song) { showToast("这首歌已被其他操作修改，请刷新核对。", "info"); return; }
+          $("statusFilter").value = "all"; $("searchInput").value = song.filename; renderSongsTable();
+          const target = [...$("songTableBody").children].find(row => row.dataset.filename === song.filename);
+          if (target) { target.classList.add("is-located"); target.scrollIntoView({block:"center"}); target.querySelector("button")?.focus(); }
+        });
+        $("duplicateChoices").append(button);
+      }
+      $("duplicateNotice").hidden = false;
     }
     async function apiRequest(endpoint, options = {}) {
       const b = await waitForBridge();
@@ -673,7 +706,7 @@
       for (const [key, value] of Object.entries(options.params || {})) url.searchParams.set(key, value);
       const response = await fetch(url, { method: options.method || "GET", headers: {"Content-Type": "application/json"}, body: options.body ? JSON.stringify(options.body) : undefined });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.message || "请从 AstrBot 原生曲库页面操作。");
+      if (!response.ok && result.status !== "error") throw new Error(result.message || "请从 AstrBot 原生曲库页面操作。");
       return unwrap(result);
     }
     async function fetchSongs() {
@@ -718,7 +751,7 @@
       $("emptyTitle").textContent = loadFailed ? "曲库暂时无法加载" : songsData.length ? "没有符合筛选条件的歌曲" : "曲库暂无音频文件";
       $("emptyHint").textContent = songsData.length ? "试试其他歌名、别名或点播状态。" : "上传后默认为草稿，设置别名并启用后即可点播。";
       rows.forEach((song, index) => {
-        const tr = document.createElement("tr");
+        const tr = document.createElement("tr"); tr.dataset.filename = song.filename;
         tr.append(el("td", index + 1));
         const title = el("td");
         const line = el("div", undefined, "song-title-cell");
@@ -825,6 +858,7 @@
     });
     const dropzone=$("dropzone"),fileInput=$("fileInput"),uploadForm=$("uploadForm"),songNameInput=$("songNameInput");
     function handleFileSelect(file) {
+      hideDuplicate();
       if (busy) return;
       if (!/\.(mp3|wav|m4a|ogg|flac)$/i.test(file.name) || !file.size || file.size>50*1024*1024) {showToast("请选择50MB以内的MP3、WAV、M4A、OGG或FLAC音频。","error");return;}
       selectedFile=file;songNameInput.value=file.name.replace(/\.[^.]+$/,"");uploadForm.style.display="flex";
@@ -839,17 +873,23 @@
     $("btnUploadCancel").addEventListener("click",()=>{selectedFile=null;fileInput.value="";uploadForm.style.display="none";$("selectedFileInfo").textContent="";});
     $("btnUploadSubmit").addEventListener("click",async()=>{
       if (busy||!selectedFile) return;
+      hideDuplicate();
       const file=selectedFile,name=songNameInput.value.trim()||file.name.replace(/\.[^.]+$/,"");
       setBusy(true);
       try {
         const b=await waitForBridge();let data;
         const filename=name+(file.name.match(/\.[^.]+$/)?.[0]||".mp3");
-        if(b?.upload) data=unwrap(await b.upload("page/songs/upload",new File([file],filename,{type:file.type})));
+        if(b?.upload) data=unwrap(await b.upload("page/songs/upload-v2",new File([file],filename,{type:file.type})));
         else {
           if(file.size>4*1024*1024)throw new Error("大文件请从 AstrBot 原生曲库页面上传；兼容上传上限4MB。");
           const encoded=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result.split(",")[1]);reader.onerror=reject;reader.readAsDataURL(file);});
-          data=await apiRequest("page/songs/upload",{method:"POST",body:{filename,song_name:name,content_base64:encoded}});
+          data=await apiRequest("page/songs/upload-v2",{method:"POST",body:{filename,song_name:name,content_base64:encoded}});
         }
+        if (data?.upload_conflict?.code === "duplicate_audio") {
+          selectedFile=null;fileInput.value="";uploadForm.style.display="none";$("selectedFileInfo").textContent="";
+          showDuplicate(data.upload_conflict); showToast("已找到相同原音，没有重复占用曲库空间。", "info"); return;
+        }
+        if (typeof data?.filename !== "string") throw new Error("未收到已保存的曲目记录，请刷新核对，不要重复提交。");
         selectedFile=null;fileInput.value="";uploadForm.style.display="none";$("selectedFileInfo").textContent="";
         showToast("音频已校验并保存为草稿，请设置别名并启用点播。","success");await fetchSongs();
         if(data?.filename) {setBusy(false);const song=songsData.find(x=>x.filename===data.filename);if(song)editSong(song);}

@@ -8,7 +8,9 @@ import math
 import os
 import re
 import shutil
+import threading
 import uuid
+from functools import wraps
 from pathlib import Path
 
 from .core import (
@@ -22,6 +24,7 @@ from .core import (
     list_preset_songs_detail,
     sanitize_song_name,
 )
+from .fingerprints import FingerprintCache, FingerprintError
 
 MAX_SONGS = 500
 MAX_LIBRARY_BYTES = 1024 * 1024 * 1024
@@ -33,6 +36,30 @@ class LibraryError(VoiceError):
     def __init__(self, message, status_code=400):
         super().__init__(message)
         self.status_code = status_code
+
+
+class DuplicateAudioError(LibraryError):
+    def __init__(self, duplicates):
+        self.match_count = len(duplicates)
+        self.duplicates = [
+            {key: row[key] for key in ("filename", "name", "enabled")} for row in duplicates[:8]
+        ]
+        choices = "、".join(
+            "《" + row["name"] + "》（" + ("已启用" if row["enabled"] else "草稿/未开放") + "）"
+            for row in self.duplicates[:3]
+        )
+        super().__init__(
+            "曲库已有相同原音：" + choices + "。未保存重复文件，也未修改已有曲目。", 409
+        )
+
+
+def _mutation(function):
+    @wraps(function)
+    def locked(self, *args, **kwargs):
+        with self._mutation_lock:
+            return function(self, *args, **kwargs)
+
+    return locked
 
 
 async def disk_io(function, *args, **kwargs):
@@ -49,6 +76,8 @@ class SongLibrary:
     def __init__(self, root: Path, *, readonly=False):
         self.root = Path(root)
         self.readonly = bool(readonly)
+        self._mutation_lock = threading.RLock()
+        self.hashes = FingerprintCache(max_entries=MAX_SONGS + 1)
         self.songs = self.root / "songs"
         self.staging = self.root / ".song-staging"
         marker = self.root / ".restore-incomplete"
@@ -141,27 +170,59 @@ class SongLibrary:
         self._require_write()
         return self.staging / (uuid.uuid4().hex + ".upload")
 
-    def commit(self, staged: Path, song_name, extension, media):
+    @_mutation
+    def check_upload(self, staged: Path, song_name, extension):
         self._require_write()
+        staged = Path(staged)
         if (
             staged.is_symlink()
             or staged.parent.resolve() != self.staging.resolve()
             or not staged.is_file()
         ):
             raise LibraryError("上传暂存文件无效。")
-        size = staged.stat().st_size
         ext = str(extension).lower()
-        if ext not in ALLOWED_SONG_EXTENSIONS or not 0 < size <= MAX_SONG_UPLOAD_BYTES:
-            raise LibraryError("音频格式或大小不符合限制，原曲库未改动。")
+        if ext not in ALLOWED_SONG_EXTENSIONS:
+            raise LibraryError("音频格式不符合限制，原曲库未改动。")
         name = sanitize_song_name(song_name)
         target = self.songs / (name + ext)
         if target.exists() or target.is_symlink():
             raise LibraryError("同名歌曲已存在，原文件未被覆盖；请改一个名称。", 409)
+        rows = self.list()
+        if len(rows) > MAX_SONGS:
+            raise LibraryError("曲库数量超过限制，请先整理。", 413)
+
+        def catalogue(items):
+            return sorted((row["filename"], row["revision"]) for row in items)
+
+        try:
+            candidate = self.hashes.fingerprint(staged)
+            duplicates = []
+            for row in rows:
+                if row["size_bytes"] != candidate.size_bytes:
+                    continue
+                path = get_preset_song_path(self.songs, row["filename"])
+                if self.hashes.fingerprint(path).sha256 == candidate.sha256:
+                    duplicates.append(row)
+            if catalogue(self.list()) != catalogue(rows):
+                raise LibraryError("去重校验期间曲库发生变化，请刷新后重试；未保存上传。", 409)
+        except FingerprintError as exc:
+            raise LibraryError(str(exc), 409) from exc
+        if duplicates:
+            raise DuplicateAudioError(duplicates)
         if (
-            len(self.list()) >= MAX_SONGS
-            or self._usage(excluding=staged) + size > MAX_LIBRARY_BYTES
+            len(rows) >= MAX_SONGS
+            or self._usage(excluding=staged) + candidate.size_bytes > MAX_LIBRARY_BYTES
         ):
             raise LibraryError("曲库容量或歌曲数量达到上限，请先整理；没有覆盖或删除原歌曲。", 413)
+        return candidate
+
+    @_mutation
+    def commit(self, staged: Path, song_name, extension, media, *, expected_fingerprint=None):
+        self._require_write()
+        candidate = self.check_upload(staged, song_name, extension)
+        if expected_fingerprint is not None and candidate != expected_fingerprint:
+            raise LibraryError("上传音频在解析前后发生变化，请重新选择文件；原曲库未改动。", 409)
+        target = self.songs / (sanitize_song_name(song_name) + str(extension).lower())
         index = self._read()
         index["songs"][target.name] = {
             "enabled": False,
@@ -180,8 +241,10 @@ class SongLibrary:
             target.unlink()
             raise
         staged.unlink()
+        self.hashes.forget(staged)
         return self.get(target.name)
 
+    @_mutation
     def update(self, filename, revision, *, aliases, description, enabled):
         self._require_write()
         self.get(filename, revision)
@@ -215,6 +278,7 @@ class SongLibrary:
         atomic_json(self.index, index)
         return self.get(filename)
 
+    @_mutation
     def rename(self, filename, revision, new_name):
         self._require_write()
         row = self.get(filename, revision)
@@ -241,6 +305,7 @@ class SongLibrary:
             raise
         return self.get(target.name)
 
+    @_mutation
     def delete(self, filename, revision):
         self._require_write()
         row = self.get(filename, revision)

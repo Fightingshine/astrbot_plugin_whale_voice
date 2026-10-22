@@ -83,6 +83,7 @@ module(
         "status": "error",
         "message": msg,
         "status_code": kw.get("status_code"),
+        "data": kw.get("data"),
     },
     file_response=lambda *a, **kw: types.SimpleNamespace(path=a[0], **kw),
     request=types.SimpleNamespace(username="admin"),

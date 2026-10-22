@@ -40,6 +40,7 @@ from .library import (
     MAX_SONG_SECONDS,
     MAX_SONGS,
     PREVIEW_SECONDS,
+    DuplicateAudioError,
     LibraryError,
     SongLibrary,
     disk_io,
@@ -49,7 +50,7 @@ from .library import (
 from .voice_config import VOICE_URI, VoiceConfigError, load_voice_aliases
 
 PLUGIN = "astrbot_plugin_whale_voice"
-VERSION = "0.3.1"
+VERSION = "0.3.2"
 
 
 def get_query_param(req, key: str, default: str = "") -> str:
@@ -156,6 +157,12 @@ class WhaleVoicePlugin(Star):
             self.api_songs_upload,
             ["POST"],
             "上传预置歌曲",
+        )
+        context.register_web_api(
+            "/" + PLUGIN + "/page/songs/upload-v2",
+            self.api_songs_upload_v2,
+            ["POST"],
+            "上传及处理相同原音",
         )
         context.register_web_api(
             "/" + PLUGIN + "/page/songs/delete",
@@ -315,7 +322,10 @@ class WhaleVoicePlugin(Star):
         except VoiceError as exc:
             return self._web_error(exc)
 
-    async def api_songs_upload(self):
+    async def api_songs_upload_v2(self):
+        return await self.api_songs_upload(typed_conflicts=True)
+
+    async def api_songs_upload(self, *, typed_conflicts=False):
         staged = None
         try:
             self._web_guard()
@@ -371,14 +381,24 @@ class WhaleVoicePlugin(Star):
                 extension = Path(filename).suffix.lower()
                 if extension not in ALLOWED_SONG_EXTENSIONS:
                     raise LibraryError("不支持的音频扩展名。")
+                expected = await disk_io(self.library.check_upload, staged, name, extension)
                 media = await probe_audio(staged)
-                item = await disk_io(self.library.commit, staged, name, extension, media)
+                item = await disk_io(
+                    self.library.commit,
+                    staged,
+                    name,
+                    extension,
+                    media,
+                    expected_fingerprint=expected,
+                )
             return {
                 "status": "ok",
                 "message": "音频已校验并保存为草稿；设置别名并启用后才能群内点播。",
                 "data": item,
             }
         except VoiceError as exc:
+            if typed_conflicts and isinstance(exc, DuplicateAudioError):
+                return {"status": "ok", "data": {"upload_conflict": self._duplicate_details(exc)}}
             return self._web_error(exc)
         except Exception as exc:  # noqa: BLE001 -- API边界只记录异常类型，避免泄露凭据。
             if type(exc).__name__ == "UploadTooLargeError":
@@ -389,6 +409,7 @@ class WhaleVoicePlugin(Star):
             )
         finally:
             if staged is not None:
+                self.library.hashes.forget(staged)
                 try:
                     staged.unlink(missing_ok=True)
                 except OSError:
@@ -507,8 +528,19 @@ class WhaleVoicePlugin(Star):
                 except ValueError as exc:
                     raise LibraryError("请求长度无效。") from exc
 
+    @staticmethod
+    def _duplicate_details(exc):
+        return {
+            "code": "duplicate_audio",
+            "saved": False,
+            "message": str(exc),
+            "duplicates": exc.duplicates,
+            "match_count": exc.match_count,
+        }
+
     def _web_error(self, exc):
-        return error_response(str(exc), status_code=getattr(exc, "status_code", 400))
+        data = self._duplicate_details(exc) if isinstance(exc, DuplicateAudioError) else None
+        return error_response(str(exc), status_code=getattr(exc, "status_code", 400), data=data)
 
     async def api_songs_update(self):
         try:

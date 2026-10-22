@@ -57,7 +57,7 @@ class WebTests(unittest.IsolatedAsyncioTestCase):
 
     def song(self, name="测试曲", enabled=True, aliases=None):
         stage = self.plugin.library.create_stage()
-        stage.write_bytes(b"RIFF" + b"x" * 80)
+        stage.write_bytes(b"RIFF" + (name.encode("utf-8") + b"x" * 80)[:80])
         row = self.plugin.library.commit(stage, name, ".wav", {"duration_seconds": 1})
         return self.plugin.library.update(
             row["filename"],
@@ -105,6 +105,75 @@ class WebTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(result["data"]["enabled"])
         self.assertTrue(upload.reads)
         self.assertTrue(all(n == 65536 for n in upload.reads))
+
+    async def test_identical_audio_other_name_returns_actionable_conflict_without_probe(self):
+        row = self.song(enabled=False)
+        before = self.plugin.library.index.read_bytes()
+        upload = Upload((self.plugin.songs_dir / row["filename"]).read_bytes())
+        upload.filename = "换个名字.wav"
+        with (
+            patch.object(module, "request", Request(files={"file": upload})),
+            patch.object(module, "probe_audio") as probe,
+        ):
+            result = await self.plugin.api_songs_upload_v2()
+        self.assertEqual(result["status"], "ok")
+        conflict = result["data"]["upload_conflict"]
+        self.assertEqual(conflict["code"], "duplicate_audio")
+        self.assertFalse(conflict["saved"])
+        self.assertEqual(
+            conflict["duplicates"],
+            [{"filename": row["filename"], "name": row["name"], "enabled": False}],
+        )
+        self.assertEqual(self.plugin.library.index.read_bytes(), before)
+        self.assertFalse(list(self.plugin.library.staging.iterdir()))
+        probe.assert_not_called()
+
+    async def test_legacy_identical_audio_keeps_http_conflict(self):
+        row = self.song(enabled=True)
+        upload = Upload((self.plugin.songs_dir / row["filename"]).read_bytes())
+        upload.filename = "不同名称.wav"
+        with patch.object(module, "request", Request(files={"file": upload})):
+            result = await self.plugin.api_songs_upload()
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(result["status_code"], 409)
+        self.assertEqual(result["data"]["code"], "duplicate_audio")
+        self.assertEqual(len(self.plugin.library.list()), 1)
+
+    async def test_v2_unauthenticated_upload_still_forbidden(self):
+        with patch.object(module, "request", Request(username="")):
+            result = await self.plugin.api_songs_upload_v2()
+        self.assertEqual(result["status_code"], 403)
+        self.assertNotIn("upload_conflict", str(result))
+
+    async def test_unauthenticated_upload_never_reads_or_hashes_library(self):
+        request = Request(files={"file": Upload()}, username="")
+        with (
+            patch.object(module, "request", request),
+            patch.object(
+                self.plugin.library,
+                "check_upload",
+                side_effect=AssertionError("未登录不能查询曲库"),
+            ) as check,
+        ):
+            result = await self.plugin.api_songs_upload()
+        self.assertEqual(result["status_code"], 403)
+        self.assertEqual(request.reads, 0)
+        check.assert_not_called()
+        self.assertNotIn("duplicates", str(result))
+
+    async def test_staged_content_changed_by_probe_is_rejected(self):
+        async def changed(path):
+            path.write_bytes(b"RIFF" + b"changed" * 16)
+            return {"duration_seconds": 1}
+
+        with (
+            patch.object(module, "request", Request(files={"file": Upload()})),
+            patch.object(module, "probe_audio", side_effect=changed),
+        ):
+            result = await self.plugin.api_songs_upload()
+        self.assertEqual(result["status_code"], 409)
+        self.assertFalse(self.plugin.library.list())
+        self.assertFalse(list(self.plugin.library.staging.iterdir()))
 
     async def test_invalid_audio_not_saved(self):
         request = Request(files={"file": Upload()})

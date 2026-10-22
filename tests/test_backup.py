@@ -35,7 +35,7 @@ class BackupTests(unittest.TestCase):
 
     def song(self, name="原音", enabled=True, aliases=None):
         stage = self.library.create_stage()
-        body = b"RIFF" + bytes(range(64))
+        body = b"RIFF" + hashlib.sha256(name.encode("utf-8")).digest() + bytes(range(32))
         stage.write_bytes(body)
         row = self.library.commit(stage, name, ".wav", {"duration_seconds": 1.25})
         row = self.library.update(
