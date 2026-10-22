@@ -49,7 +49,7 @@ from .library import (
 from .voice_config import VOICE_URI, VoiceConfigError, load_voice_aliases
 
 PLUGIN = "astrbot_plugin_whale_voice"
-VERSION = "0.3.0"
+VERSION = "0.3.1"
 
 
 def get_query_param(req, key: str, default: str = "") -> str:
@@ -297,6 +297,7 @@ class WhaleVoicePlugin(Star):
             return {
                 "status": "ok",
                 "data": {
+                    "plugin_version": VERSION,
                     "songs": songs,
                     "total_count": len(songs),
                     "enabled_count": sum(row["enabled"] for row in songs),

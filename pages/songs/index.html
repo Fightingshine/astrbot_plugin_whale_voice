@@ -468,7 +468,7 @@
         <div class="header-icon">🐳</div>
         <div class="header-title">
           <h1>预置原音曲库管理</h1>
-          <p>v0.3.0 · 保留专属音色 · 曲库点播不调用语音模型 · 未命中不自动合成</p>
+          <p><span id="versionLabel">v0.3.1</span> · 保留专属音色 · 曲库点播不调用语音模型 · 未命中不自动合成</p>
         </div>
       </div>
       <div>
@@ -680,6 +680,7 @@
       try {
         const data = await apiRequest("page/songs/list");
         songsData = data.songs || [];
+        if (data.plugin_version) $("versionLabel").textContent = "v" + data.plugin_version;
         loadFailed = false;
         $("statCount").textContent = `${data.total_count} 首 / 启用 ${data.enabled_count ?? data.total_count}`;
         $("statSize").textContent = data.total_size_str || "0 B";

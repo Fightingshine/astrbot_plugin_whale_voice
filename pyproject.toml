@@ -1,6 +1,6 @@
 [project]
 name = "astrbot-plugin-whale-voice"
-version = "0.3.0"
+version = "0.3.1"
 description = "AstrBot 按需语音与预置曲库管理"
 requires-python = ">=3.10"
 license = "MIT"
@@ -17,3 +17,4 @@ select = ["E4", "E7", "E9", "F", "I", "B", "UP"]
 [tool.ruff.lint.per-file-ignores]
 "tests/test_main.py" = ["E402"]
 "scripts/migrate_voice_config.py" = ["E402"]
+"scripts/manage_library.py" = ["E402"]
