@@ -18,6 +18,8 @@ class WorkflowTests(unittest.TestCase):
         matrix = obj["jobs"]["test"]["strategy"]["matrix"]
         self.assertEqual(set(matrix["os"]), {"ubuntu-latest", "windows-latest"})
         self.assertEqual(set(matrix["python"]), {"3.10", "3.12"})
+        self.assertIn("browser", obj["jobs"])
+        self.assertIn("scripts/browser_smoke.py", str(obj["jobs"]["browser"]))
 
     def test_external_actions_pinned_to_commit(self):
         for path in (ROOT / ".github/workflows").glob("*.yml"):

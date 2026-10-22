@@ -73,10 +73,14 @@ def check(name, condition):
 
 try:
     with sync_playwright() as p:
-        edge = Path(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe")
+        candidates = [
+            Path(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"),
+            Path(r"C:\Program Files\Microsoft\Edge\Application\msedge.exe"),
+        ]
+        edge = next((path for path in candidates if path.is_file()), None)
         browser = (
             p.chromium.launch(executable_path=str(edge), headless=True)
-            if edge.is_file()
+            if edge
             else p.chromium.launch(headless=True)
         )
         ctx = browser.new_context(viewport={"width": 1440, "height": 1050})
@@ -122,8 +126,9 @@ try:
         check("enabled_filter_updates", page.locator("#songTableBody tr").count() == 0)
         page.locator("#statusFilter").select_option("all")
         page.locator("#searchInput").fill("O'Clock")
-        page.once("dialog", lambda dialog: dialog.accept("时钟新名字"))
         page.get_by_role("button", name="重命名：O'Clock", exact=True).click()
+        page.locator("#actionName").fill("时钟新名字")
+        page.locator("#actionConfirm").click()
         page.wait_for_function("window.__rows.some(x=>x.name==='时钟新名字')")
         check(
             "rename_revision_submitted",
@@ -154,8 +159,8 @@ try:
         page.wait_for_function("!document.querySelector('#editDialog').open")
         page.locator("#searchInput").fill("新曲别名")
         check("uploaded_alias_search", page.locator("#songTableBody tr").count() == 1)
-        page.once("dialog", lambda dialog: dialog.accept())
         page.get_by_role("button", name="删除：界面验收曲", exact=True).click()
+        page.locator("#actionConfirm").click()
         page.wait_for_function("!window.__rows.some(x=>x.name==='界面验收曲')")
         check(
             "delete_revision_submitted",
@@ -200,6 +205,24 @@ try:
         page.evaluate("document.documentElement.dataset.theme='dark'")
         page.screenshot(path=str(OUT / "fixture-dark.png"), full_page=True)
         check("console_no_page_errors", not errors)
+        sandbox = ctx.new_page()
+        sandbox.on("pageerror", lambda error: errors.append(str(error)))
+        sandbox.goto(f"http://127.0.0.1:{server.server_port}/index.html")
+        sandbox.set_content(
+            '<iframe id="sandboxFrame" sandbox="allow-scripts" src="/index.html" style="width:100%;height:1000px;border:0"></iframe>'
+        )
+        inner = sandbox.frame_locator("#sandboxFrame")
+        inner.locator("#songTableBody tr").first.wait_for()
+        inner.get_by_role("button", name="重命名：O'Clock", exact=True).click()
+        inner.locator("#actionName").fill("沙箱新歌名")
+        inner.locator("#actionConfirm").click()
+        inner.get_by_role("button", name="删除：沙箱新歌名", exact=True).wait_for()
+        check("sandbox_rename_dialog_works", True)
+        inner.get_by_role("button", name="删除：沙箱新歌名", exact=True).click()
+        inner.locator("#actionConfirm").click()
+        inner.get_by_role("button", name="删除：沙箱新歌名", exact=True).wait_for(state="detached")
+        check("sandbox_delete_confirmation_works", True)
+        sandbox.close()
         report = {
             "checks": checks,
             "check_count": len(checks),

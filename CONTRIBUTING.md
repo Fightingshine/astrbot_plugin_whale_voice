@@ -56,4 +56,4 @@ $env:PLAYWRIGHT_DOWNLOAD_HOST="https://npmmirror.com/mirrors/playwright/"
 4. 不提交`voice-aliases.json`、运行配置、音频或测试产物。
 5. 更新运行版本时同步`main.py`、`metadata.yaml`、`pyproject.toml`。
 
-CI会在Windows/Linux与Python 3.10/3.12组合中运行离线回归。标签发布只有验证全部通过后才创建Release。
+CI会在Windows/Linux与Python 3.10/3.12组合中运行离线回归，并在Windows Edge中运行页面与不带allow-modals的沙箱回归。标签发布只有验证全部通过后才创建Release。

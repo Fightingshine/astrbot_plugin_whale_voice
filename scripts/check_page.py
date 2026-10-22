@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import subprocess
 import tempfile
 from html.parser import HTMLParser
@@ -34,6 +35,8 @@ def main():
     for path in (root / "pages").rglob("*.html"):
         parser = Scripts()
         parser.feed(path.read_text(encoding="utf-8-sig"))
+        if re.search(r"\b(?:window\.)?(?:prompt|confirm|alert)\s*\(", "\n".join(parser.parts)):
+            raise ValueError("原生沙箱不允许系统对话框，请使用HTML dialog。")
         with tempfile.TemporaryDirectory(prefix="whale-js-check-") as directory:
             script = Path(directory) / "page.js"
             script.write_text("\n".join(parser.parts), encoding="utf-8")

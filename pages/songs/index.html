@@ -452,7 +452,7 @@
       to { transform: translateX(0); opacity: 1; }
     }
 
-    .library-toolbar{display:flex;justify-content:space-between;gap:12px;align-items:center;margin:12px 0 18px}.library-toolbar label{display:flex;gap:10px;align-items:center;white-space:nowrap}.library-toolbar select{width:auto;min-width:130px}.song-detail{font-size:12px;color:var(--text-muted);margin-top:6px;overflow-wrap:anywhere}.state-badge{font-size:11px;padding:3px 7px;border-radius:12px;white-space:nowrap}.state-badge.enabled{background:#e3f5ec;color:#126447}.state-badge.draft{background:#fff1d7;color:#8b5717}.song-actions{justify-content:flex-end;flex-wrap:wrap}.song-table{min-width:900px}.song-title-cell{flex-wrap:wrap}.song-table td{overflow-wrap:anywhere}dialog{width:min(540px,92vw);padding:24px;border:1px solid var(--border-color);border-radius:16px;background:var(--card-bg);color:var(--text-main);box-shadow:0 24px 80px #0004}dialog::backdrop{background:#0006}dialog h2{font-size:20px;margin:0 0 20px}dialog label{display:block;margin:14px 0 6px}dialog textarea,dialog input[type=text]{width:100%;box-sizing:border-box}dialog textarea{min-height:88px;resize:vertical}dialog .dialog-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}.error-text{color:#c93737;min-height:20px;font-size:13px}.enabled-label{display:flex!important;gap:9px;align-items:center}button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,[role=button]:focus-visible{outline:3px solid #74b7f2;outline-offset:3px}@media(max-width:600px){.library-toolbar{align-items:flex-start;flex-direction:column}.list-header{gap:12px;align-items:flex-start;flex-direction:column}.search-box{width:100%}.player-bar{max-width:100vw;box-sizing:border-box}dialog{padding:18px}}
+    .library-toolbar{display:flex;justify-content:space-between;gap:12px;align-items:center;margin:12px 0 18px}.library-toolbar label{display:flex;gap:10px;align-items:center;white-space:nowrap}.library-toolbar select{width:auto;min-width:130px}.song-detail{font-size:12px;color:var(--text-muted);margin-top:6px;overflow-wrap:anywhere}.state-badge{font-size:11px;padding:3px 7px;border-radius:12px;white-space:nowrap}.state-badge.enabled{background:#e3f5ec;color:#126447}.state-badge.draft{background:#fff1d7;color:#8b5717}.song-actions{justify-content:flex-end;flex-wrap:wrap}.song-table{min-width:900px}.song-title-cell{flex-wrap:wrap}.song-table td{overflow-wrap:anywhere}dialog{margin:auto;max-height:90vh;overflow:auto;width:min(540px,92vw);padding:24px;border:1px solid var(--border-color);border-radius:16px;background:var(--card-bg);color:var(--text-main);box-shadow:0 24px 80px #0004}dialog::backdrop{background:#0006}dialog h2{font-size:20px;margin:0 0 20px}dialog label{display:block;margin:14px 0 6px}dialog textarea,dialog input[type=text]{width:100%;box-sizing:border-box}dialog textarea{min-height:88px;resize:vertical}dialog .dialog-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}.error-text{color:#c93737;min-height:20px;font-size:13px}.enabled-label{display:flex!important;gap:9px;align-items:center}button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,[role=button]:focus-visible{outline:3px solid #74b7f2;outline-offset:3px}@media(max-width:600px){.library-toolbar{align-items:flex-start;flex-direction:column}.list-header{gap:12px;align-items:flex-start;flex-direction:column}.search-box{width:100%}.player-bar{max-width:100vw;box-sizing:border-box}dialog{padding:18px}}
 
     .player-bar:not(.active){visibility:hidden;pointer-events:none}.player-bar.active{visibility:visible;pointer-events:auto}.song-table td{white-space:normal}.header-left,.header-title{min-width:0}.header-title p{overflow-wrap:anywhere}
     @media(max-width:640px){body{padding:16px 12px 70px}.header{flex-direction:column;align-items:stretch;gap:14px}.header-left{align-items:flex-start}.header-title h1{font-size:20px}.header>div:last-child .btn{width:100%}.song-table{min-width:0;display:block}.song-table thead{display:none}.song-table tbody{display:grid;gap:12px}.song-table tr{display:block;padding:12px;border:1px solid var(--border-color);border-radius:10px}.song-table td{display:block;padding:5px 0;border:0;white-space:normal}.song-table td:first-child{display:none}.song-table td[data-label]::before{content:attr(data-label) "：";color:var(--text-muted)}.song-actions{justify-content:flex-start;gap:8px}.song-actions .btn{min-height:36px}.player-bar{flex-wrap:wrap;padding:12px;gap:10px}.player-info{min-width:0;flex:1}.player-controls{flex-basis:100%;order:3;max-width:none}}
@@ -592,6 +592,8 @@
 
 
   <dialog id="editDialog" aria-labelledby="editTitle"><h2 id="editTitle">歌曲设置</h2><label for="editAliases">点播别名</label><input id="editAliases" class="form-input" type="text" maxlength="500" placeholder="例如：小鲸鱼，人是猫完整版"><div class="song-detail">用逗号分隔，最多12个；重复别名可能需要同学指定完整歌名。</div><label for="editDescription">曲目说明</label><textarea id="editDescription" class="form-input" maxlength="200" placeholder="例如：小蓝鲸预置翻唱，完整版"></textarea><label class="enabled-label"><input id="editEnabled" type="checkbox">允许群内点播这首歌</label><p id="editError" class="error-text" role="alert"></p><div class="dialog-actions"><button class="btn btn-secondary" id="editCancel">取消</button><button class="btn btn-primary" id="editSave">保存设置</button></div></dialog>
+
+  <dialog id="actionDialog" aria-labelledby="actionTitle"><h2 id="actionTitle">确认操作</h2><p id="actionHint" class="song-detail"></p><label for="actionName" id="actionNameLabel">新歌名</label><input id="actionName" class="form-input" type="text" maxlength="64"><p id="actionError" class="error-text" role="alert"></p><div class="dialog-actions"><button class="btn btn-secondary" id="actionCancel">取消</button><button class="btn btn-primary" id="actionConfirm">确认</button></div></dialog>
   <script>
     // 状态管理
     let songsData = [];
@@ -635,6 +637,7 @@
     // Toast 提示函数
     let busy = false;
     let editingSong = null;
+    let pendingAction = null;
     let loadFailed = false;
     const $ = (id) => document.getElementById(id);
     function el(tag, text, className) {
@@ -787,22 +790,38 @@
     });
     $("editCancel").addEventListener("click", () => {if (!busy) $("editDialog").close();});
     $("editDialog").addEventListener("cancel", event => {if (busy) event.preventDefault();});
-    async function renameSong(song) {
+    function openAction(kind, song) {
       if (busy) return;
-      const name = prompt(`请输入歌曲《${song.name}》的新名称：`, song.name);
-      if (!name || name.trim() === song.name) return;
-      setBusy(true);
-      try {await apiRequest("page/songs/rename",{method:"POST",body:{filename:song.filename,revision:song.revision,new_name:name.trim()}});showToast("歌名已修改，原音和别名已保留。","success");await fetchSongs();}
-      catch(error) {showToast(error.message,"error");await fetchSongs();}
-      finally {setBusy(false);}
+      pendingAction = {kind, song};
+      $("actionTitle").textContent = (kind === "delete" ? "删除《" : "重命名《") + song.name + "》";
+      $("actionHint").textContent = kind === "delete" ? "这会删除该歌曲原音文件，不能撤销。请确认不是误操作。" : "仅修改点播名称，原音、别名和启停设置会保留。";
+      $("actionNameLabel").hidden = kind === "delete";
+      $("actionName").hidden = kind === "delete";
+      $("actionName").value = song.name;
+      $("actionError").textContent = "";
+      $("actionConfirm").textContent = kind === "delete" ? "确认删除原音" : "保存新歌名";
+      $("actionConfirm").className = "btn " + (kind === "delete" ? "btn-danger" : "btn-primary");
+      $("actionDialog").showModal();
+      (kind === "delete" ? $("actionCancel") : $("actionName")).focus();
     }
-    async function deleteSong(song) {
-      if (busy || !confirm(`确定删除歌曲《${song.name}》的原音文件？此操作不能撤销。`)) return;
+    function renameSong(song) {openAction("rename", song);}
+    function deleteSong(song) {openAction("delete", song);}
+    $("actionCancel").addEventListener("click", () => {if (!busy) {pendingAction = null;$("actionDialog").close();}});
+    $("actionDialog").addEventListener("cancel", event => {if (busy) event.preventDefault();});
+    $("actionConfirm").addEventListener("click", async () => {
+      if (busy || !pendingAction) return;
+      const {kind, song} = pendingAction;
+      const newName = $("actionName").value.trim();
+      if (kind === "rename" && !newName) {$("actionError").textContent = "请填写新歌名。";return;}
       setBusy(true);
-      try {await apiRequest("page/songs/delete",{method:"POST",body:{filename:song.filename,revision:song.revision}});showToast("歌曲已删除。","success");await fetchSongs();}
-      catch(error) {showToast(error.message,"error");await fetchSongs();}
+      try {
+        await apiRequest("page/songs/" + kind, {method:"POST", body:{filename:song.filename,revision:song.revision,...(kind === "rename" ? {new_name:newName} : {})}});
+        $("actionDialog").close();pendingAction = null;
+        showToast(kind === "delete" ? "歌曲已删除。" : "歌名已修改，原音和别名已保留。", "success");
+        await fetchSongs();
+      } catch (error) {$("actionError").textContent = error.message;}
       finally {setBusy(false);}
-    }
+    });
     const dropzone=$("dropzone"),fileInput=$("fileInput"),uploadForm=$("uploadForm"),songNameInput=$("songNameInput");
     function handleFileSelect(file) {
       if (busy) return;

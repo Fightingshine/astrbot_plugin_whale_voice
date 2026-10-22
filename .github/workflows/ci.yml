@@ -44,3 +44,25 @@ jobs:
         run: python scripts/check_page.py
       - name: 构建源码归档
         run: python scripts/build_release.py
+
+  browser:
+    name: Windows Edge / 浏览器与沙箱回归
+    runs-on: windows-latest
+    env:
+      PYTHONIOENCODING: utf-8
+      PIP_INDEX_URL: https://pypi.tuna.tsinghua.edu.cn/simple
+    steps:
+      - name: 检出源码
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: 设置Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements-browser.txt
+      - name: 安装浏览器测试依赖
+        run: python -m pip install -r requirements-browser.txt
+      - name: 运行隔离页面和原生沙箱协议桩
+        run: python scripts/browser_smoke.py
